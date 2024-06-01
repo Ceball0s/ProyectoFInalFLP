@@ -75,41 +75,14 @@
     (expression ("set" identifier "=" expression)
                 set-exp)
     ;;;;;;
-    ; implementacin diccionario
-    ;<e x p r e s s i o n> : : = "{" ( i d e n t i f i e r ":" e x p r e s s i o n ) ∗ ( , ) "}"
-    (expression
-     ( "{" (separated-list identifier ":" expression ",")"}")
-     diccionario-exp)
-    ; index
-    (expression
-     ("index" "(" expression "," identifier ")")
-     diccionario-index-exp)
-    ; update
-    (expression
-     ("update" "(" expression "," identifier "," expression ")")
-     diccionario-update-exp)
-    ; suma
-    (expression
-     ("sumDic" "(" expression ")")
-     diccionario-suma-exp)
-    ; multiplicacion
-    (expression
-     ("mulDic" "(" expression ")")
-     diccionario-mult-exp)
-    ;;;;;;
     
-
     (primitive ("+") add-prim)
     (primitive ("-") substract-prim)
     (primitive ("*") mult-prim)
     (primitive ("add1") incr-prim)
     (primitive ("sub1") decr-prim)
     (primitive (">") mayor-prim)
-    ;; primitiva display-dick
-    (primitive ("display-dict") display-dict)
-
-    ;; proyecto_inicio 
-    (expression ("while" expression "{" expression "}") while-exp)
+    (primitive ("==") igual-prim)
     ))
 
 
@@ -211,80 +184,23 @@
 ;     '(4 2 5)
 ;     (empty-env))))
 
-(define init-env
-  (lambda ()
-    (extend-env
-     '(i v x)
-     '(1 5 10)
-     (empty-env))))
-
 ;(define init-env
 ;  (lambda ()
 ;    (extend-env
-;     '(x y z f)
-;     (list 4 2 5 (closure '(y) (primapp-exp (mult-prim) (cons (var-exp 'y) (cons (primapp-exp (decr-prim) (cons (var-exp 'y) ())) ())))
-;                      (empty-env)))
+;     '(i v x)
+;     '(1 5 10)
 ;     (empty-env))))
-; definicion de dicionario
-(define-datatype diccionario diccionario?
-  (dict-empty)
-  (dict-no-empty (llave symbol?) (valor number?) (dict-ext diccionario?))
-)
 
-(define ordenar_dicionario
-  (lambda (diccio)
-    (letrec
-      (
-        (ordenar_merge
-          (lambda (dic1 dic2)
-            (cond
-              [(null? dic1) dic2]
-              [(null? dic2) dic1]
-              [(string>? (symbol->string (caar dic1)) (symbol->string (caar dic2))) 
-                (cons (car dic2) (ordenar_merge dic1 (cdr dic2)))
-              ]
-              [else (cons (car dic1) (ordenar_merge (cdr dic1) dic2))]
-            )
-          )
-        )
-        (take
-          (lambda (array numero)
-            (cond
-              [(= numero 0) '()]
-              [else (cons (car array) (take (cdr array) (- numero 1)))]
-            )
-          )
-        ) 
-        (drop
-          (lambda (array numero)
-            (cond
-              [(= numero 0) array]
-              [else (drop (cdr array) (- numero 1))]
-            )
-          )
-        )
-        (merge_sort
-          (lambda (arr-type-dic)
-            (if (<= (length arr-type-dic) 1) arr-type-dic
-              (let
-                (
-                  [mitad (/ (length arr-type-dic) 2)]
-                ) 
-                (ordenar_merge
-                  (merge_sort (take arr-type-dic (round mitad)))
-                  (merge_sort (drop arr-type-dic (round mitad)))
-                )
-                
-              )
-            )
-          )
-        ) 
-      )
-      (merge_sort  diccio)
-      
-    )
-  )
-)
+(define init-env
+  (lambda ()
+    (extend-env
+     '(x y z f)
+     (list 4 2 5 (closure '(y) (primapp-exp (mult-prim) (cons (var-exp 'y) (cons (primapp-exp (decr-prim) (cons (var-exp 'y) '())) '())))
+                      (empty-env)))
+     (empty-env))))
+
+
+(define modificar-env)
 ;eval-expression: <expression> <enviroment> -> numero
 ; evalua la expresión en el ambiente de entrada
 (define eval-expression
@@ -301,13 +217,6 @@
               (if (eval-expression test-exp env)
                   (eval-expression true-exp env)
                   (eval-expression false-exp env)))
-      (while-exp (test-exp cuerpo-exp)
-        (if (eval-expression test-exp env) 
-          (
-            (eval-expression  cuerpo-exp env) 
-            (eval-expression  (while-exp test-exp cuerpo-exp) env) 
-          )
-          '()  ))
       (let-exp (ids rands body)
                (let ((args (eval-rands rands env)))
                  (eval-expression body
@@ -325,11 +234,13 @@
                   (eval-expression letrec-body
                                    (extend-env-recursively proc-names idss bodies env)))
       (set-exp (id rhs-exp)
-               (begin
-                 (setref!
-                  (apply-env-ref env id)
-                  (eval-expression rhs-exp env))
-                 1))
+        0)
+               ;(begin
+                ; (setref!
+                ;  (apply-env-ref env id)
+                ;  (eval-expression rhs-exp env))
+                ; 1))
+
       (begin-exp (exp exps) 
                  (let loop ((acc (eval-expression exp env))
                              (exps exps))
@@ -337,99 +248,7 @@
                         acc
                         (loop (eval-expression (car exps) 
                                                env)
-                              (cdr exps)))))
-      (diccionario-exp (llaves valores)
-        (letrec (
-            (inser_no_rep_dict
-              (lambda (dic llave valor)
-                (cond
-                  [(null? dic) (list (list llave valor))]
-                  [(equal? (caar dic) llave) (cons (list llave valor) (cdr dic))]
-                  [else (cons (car dic) (inser_no_rep_dict (cdr dic) llave valor))]
-                )
-              )
-            )
-            (crear_dic
-              (lambda (llaves valores dic)
-                (if (null? llaves) dic 
-                  (crear_dic (cdr llaves) (cdr valores) (inser_no_rep_dict dic (car llaves) (car valores)))
-                )
-              )
-            )
-          )
-          (ordenar_dicionario (crear_dic llaves (eval-rands valores env) '()))
-        ) 
-      )
-      (diccionario-index-exp (dicciona indice)
-        (letrec
-          (
-            [dic (eval-expression dicciona env)]
-            [retornar_valor
-              (lambda (dicc indice)
-                (cond
-                  [(null? dicc) (eopl:error "el indice no existe")]
-                  [(equal? (caar dicc) indice) (cadar dicc)]
-                  [else (retornar_valor (cdr dicc) indice)]
-                )
-              )
-            ]
-          )
-          (retornar_valor dic indice)
-        )
-      )
-      (diccionario-update-exp (expt1 indice exp2)
-        (letrec
-          (
-            [dic (eval-expression expt1 env)]
-            [valor (eval-expression exp2 env)]
-            [actualizar_diccionario
-              (lambda (dicc indice valor)
-                (cond
-                  [(null? dicc) (eopl:error "el indice no existe")]
-                  [(equal? (caar dicc) indice) (cons (list indice valor) (cdr dicc))]
-                  [else (cons (car dicc) (actualizar_diccionario (cdr dicc) indice valor))]
-                )
-              )
-            ]
-          )
-          (actualizar_diccionario dic indice valor)
-        )
-      )
-      (diccionario-suma-exp (exp)
-        (letrec
-          (
-            [dic (eval-expression exp env)]
-            [suma_diccionario
-              (lambda (dicc acc)
-                (cond
-                  [(null? dicc) acc]
-                  [else (suma_diccionario (cdr dicc) (+ acc (cadar dicc)))]
-                )
-              )
-            ]
-          )
-          (suma_diccionario dic 0)
-        )
-      )
-      (diccionario-mult-exp (exp)
-        (letrec
-          (
-            [dic (eval-expression exp env)]
-            [mult_diccionario
-              (lambda (dicc acc)
-                (cond
-                  [(null? dicc) acc]
-                  [else (mult_diccionario (cdr dicc) (* acc (cadar dicc)))]
-                )
-              )
-            ]
-          )
-          (mult_diccionario dic 1)
-        )
-      )
-    )
-  )
-)
+                              (cdr exps))))))))
 
 ; funciones auxiliares para aplicar eval-expression a cada elemento de una 
 ; lista de operandos (expresiones)
@@ -461,25 +280,8 @@
       (incr-prim () (+ (car args) 1))
       (decr-prim () (- (car args) 1))
       (mayor-prim () (> (car args) (cadr args)))
-      (display-dict () 
-        (letrec (
-            (recorrer_diccionario
-              (lambda (diccio)
-                (cond
-                  [(null? diccio) (string "}")]
-                  [(null? (cdr diccio)) (string-append (symbol->string (caar diccio)) ":" (number->string (cadar diccio)) "}")]
-                  [else (string-append (symbol->string (caar diccio)) ":" (number->string (cadar diccio)) ", " (recorrer_diccionario (cdr diccio)))]
-                )
-              )
-            )
-          )
-          (string-append "{" (recorrer_diccionario (car args)))
-        )
-      
-      )
-    )
-  )
-)
+      (igual-prim () (equal? (car args) (cadr args)))
+      )))
 
 ;true-value?: determina si un valor dado corresponde a un valor booleano falso o verdadero
 (define true-value?
@@ -506,26 +308,31 @@
 
 ;definición del tipo de dato ambiente
 (define-datatype environment environment?
-  (empty-env-record)
-  (extended-env-record
+  (empty-env)
+  (extend-env
    (syms (list-of symbol?))
-   (vec vector?)
-   (env environment?)))
+   (valores (list-of scheme-value?))
+   (env environment?))
+  (extended-env-record
+    (nombre-procedimientos (list-of symbol?))
+    (argumentos-proc (list-of (list-of symbol?)))
+    (cuerpos-proc (list-of expression?))
+    (old-env environment?)))
 
 (define scheme-value? (lambda (v) #t))
 
 ;empty-env:      -> enviroment
 ;función que crea un ambiente vacío
-(define empty-env  
-  (lambda ()
-    (empty-env-record)))       ;llamado al constructor de ambiente vacío 
+;(define empty-env  
+;  (lambda ()
+;    (empty-env-record)))       ;llamado al constructor de ambiente vacío 
 
 
 ;extend-env: <list-of symbols> <list-of numbers> enviroment -> enviroment
 ;función que crea un ambiente extendido
-(define extend-env
-  (lambda (syms vals env)
-    (extended-env-record syms (list->vector vals) env)))
+;(define extend-env
+;  (lambda (syms vals env)
+;    (extended-env-record syms (list->vector vals) env)))
 
 ;extend-env-recursively: <list-of symbols> <list-of <list-of symbols>> <list-of expressions> environment -> environment
 ;función que crea un ambiente extendido para procedimientos recursivos
@@ -558,22 +365,67 @@
 ;        ()
 ;        (cons ini (iota-aux (+ 1 ini) fin)))))
 
+;funcion para buscar una variable en un ambiente
+(define buscador 
+  (lambda (lid lval valBus next-amb)
+    (cond
+      [(null? lid) (apply-env next-amb valBus)]
+      [(equal? (car lid) valBus) (car lval)]
+      [else (buscador (cdr lid) (cdr lval) valBus next-amb)]
+    )  
+  ) 
+)
+
 ;función que busca un símbolo en un ambiente
 (define apply-env
   (lambda (env sym)
-    (deref (apply-env-ref env sym))))
-     ;(apply-env-ref env sym)))
-    ;env))
-(define apply-env-ref
+    (cases environment env
+      (empty-env () (eopl:error "variable no encontrada"))
+      (extend-env (lid lval next-env)
+        (buscador lid lval sym next-env)
+      )
+      (else (eopl:error "variable no encontrada"))
+    ) 
+  )
+)
+
+
+(define buscador!
+  (lambda (lid lval valBus next-amb)
+    (cond
+      [(null? lid) (extend-env (apply-env next-amb valBus))]
+      [(equal? (car lid) valBus) (car lval)]
+      [else (buscador (cdr lid) (cdr lval) valBus next-amb)]
+    )  
+  ) 
+)
+
+;función que busca un símbolo en un ambiente
+(define set-env!
   (lambda (env sym)
     (cases environment env
-      (empty-env-record ()
-                        (eopl:error 'apply-env-ref "No binding for ~s" sym))
-      (extended-env-record (syms vals env)
-                           (let ((pos (rib-find-position sym syms)))
-                             (if (number? pos)
-                                 (a-ref pos vals)
-                                 (apply-env-ref env sym)))))))
+      (empty-env () (eopl:error "variable no encontrada"))
+      (extend-env (lid lval next-env)
+        (buscador lid lval sym next-env)
+      )
+      (else (eopl:error "variable no encontrada"))
+    ) 
+  )
+)
+
+    ;(deref (apply-env-ref env sym))))
+     ;(apply-env-ref env sym)))
+    ;env))
+;(define apply-env-ref
+;  (lambda (env sym)
+;    (cases environment env
+;      (empty-env-record ()
+;                        (eopl:error 'apply-env-ref "No binding for ~s" sym))
+;      (extended-env-record (syms vals env)
+;                           (let ((pos (rib-find-position sym syms)))
+;                             (if (number? pos)
+;                                 (a-ref pos vals)
+;                                 (apply-env-ref env sym)))))))
 
 
 ;*******************************************************************************************
@@ -674,6 +526,3 @@ No tocar
 Exporar funciones
 |#
 (provide (all-defined-out)) 
-
-
-
