@@ -83,6 +83,15 @@
     (primitive ("sub1") decr-prim)
     (primitive (">") mayor-prim)
     (primitive ("==") igual-prim)
+    ;;expression para ligaduras modificables
+    (expression ("var" (arbno identifier "=" expression) "in" expression) lvar-exp)
+
+    ;; struccturas
+    (struct-decl ("struct" identificador "{" (arbno identificador) "}") struct-exp)
+    ;;Instanciación y uso de estructuras
+    (expression ("new" identificador "(" (separated-list expression ",") ")") new-struct-exp)
+    ;;(expression ("get" expression "." identificador) get-struct-exp)
+    ;;(expression ("set-struct" expression "." identificador "=" expression) set-struct-exp)
     ))
 
 
@@ -200,7 +209,7 @@
      (empty-env))))
 
 
-(define modificar-env)
+
 ;eval-expression: <expression> <enviroment> -> numero
 ; evalua la expresión en el ambiente de entrada
 (define eval-expression
@@ -234,13 +243,7 @@
                   (eval-expression letrec-body
                                    (extend-env-recursively proc-names idss bodies env)))
       (set-exp (id rhs-exp)
-        0)
-               ;(begin
-                ; (setref!
-                ;  (apply-env-ref env id)
-                ;  (eval-expression rhs-exp env))
-                ; 1))
-
+        (modificar-env env id (eval-expression rhs-exp env)))
       (begin-exp (exp exps) 
                  (let loop ((acc (eval-expression exp env))
                              (exps exps))
@@ -248,7 +251,14 @@
                         acc
                         (loop (eval-expression (car exps) 
                                                env)
-                              (cdr exps))))))))
+                              (cdr exps)))))
+      (lvar-exp (ids rands body)
+        (let ((args (eval-rands rands env)))
+          (eval-expression body (extend-mod-env ids (list->vector args) env))))
+      (new-struct-exp (identi lista_atributos) identi)
+    )
+  )
+)
 
 ; funciones auxiliares para aplicar eval-expression a cada elemento de una 
 ; lista de operandos (expresiones)
@@ -313,6 +323,10 @@
    (syms (list-of symbol?))
    (valores (list-of scheme-value?))
    (env environment?))
+  (extend-mod-env
+   (syms (list-of symbol?))
+   (valores vector?)
+   (env environment?))
   (extended-env-record
     (nombre-procedimientos (list-of symbol?))
     (argumentos-proc (list-of (list-of symbol?)))
@@ -375,6 +389,15 @@
     )  
   ) 
 )
+(define buscador_mod
+  (lambda (lid lval valBus next-amb acc)
+    (cond
+      [(null? lid) (apply-env next-amb valBus)]
+      [(equal? (car lid) valBus) (vector-ref lval acc)]
+      [else (buscador (cdr lid) (cdr lval) valBus next-amb (+ acc 1))]
+    )  
+  ) 
+)
 
 ;función que busca un símbolo en un ambiente
 (define apply-env
@@ -383,6 +406,9 @@
       (empty-env () (eopl:error "variable no encontrada"))
       (extend-env (lid lval next-env)
         (buscador lid lval sym next-env)
+      )
+      (extend-mod-env (lid lval next-env)
+        (buscador_mod lid lval sym next-env 0)
       )
       (else (eopl:error "variable no encontrada"))
     ) 
@@ -429,32 +455,31 @@
 
 
 ;*******************************************************************************************
-;Referencias
+;modificar ligaduras
 
-(define-datatype reference reference?
-  (a-ref (position integer?)
-         (vec vector?)))
-
-(define deref
-  (lambda (ref)
-    (primitive-deref ref)))
-
-(define primitive-deref
-  (lambda (ref)
-    (cases reference ref
-      (a-ref (pos vec)
-             (vector-ref vec pos)))))
-
-(define setref!
-  (lambda (ref val)
-    (primitive-setref! ref val)))
-
-(define primitive-setref!
-  (lambda (ref val)
-    (cases reference ref
-      (a-ref (pos vec)
-             (vector-set! vec pos val)))))
-
+(define modificar-env
+  (lambda (env sym val)
+    (cases environment env
+      (extend-mod-env (symB Vect envNext)
+        (letrec
+          [
+            (encontrar_indice
+              (lambda (Lsym acc)
+                (cond
+                  [(null? Lsym) (eopl:error "indice no encontrado")]
+                  [(equal? (car Lsym) sym) acc]
+                  [else (encontrar_indice (cdr Lsym) (+ acc 1))]
+                )
+              )
+            )
+          ]
+          (vector-set! Vect (encontrar_indice symB 0) val)
+        )
+      )
+      (else (eopl:error "no se puede modificar un ligadura let"))
+    )
+  )
+)
 
 ;****************************************************************************************
 ;Funciones Auxiliares
