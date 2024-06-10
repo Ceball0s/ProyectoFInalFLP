@@ -44,8 +44,21 @@
    (letter (arbno (or letter digit "?"))) symbol)
   (digitoDecimal
    (digit (arbno digit)) number)
-  (number
-   ("-" digit (arbno digit)) number)))
+  (digitoDecimal
+   ("-" digit (arbno digit)) number)
+  (digitoBinario
+   ("b" (or "0" "1") (arbno (or "0" "1"))) string)
+  (digitoBinario
+   ("-" "b" (or "0" "1") (arbno (or "0" "1"))) string)
+  (digitoOctal
+   ("0x" (or "0" "1" "2" "3" "4" "5" "6" "7")(arbno (or "0" "1" "2" "3" "4" "5" "6" "7"))) string)
+  (digitoOctal
+   ("-" "0x" (or "0" "1" "2" "3" "4" "5" "6" "7") (arbno (or "0" "1" "2" "3" "4" "5" "6" "7"))) string)
+  (digitoHexadecimal
+   ("hx" (or "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "A" "B" "C" "D" "E" "F") (arbno (or "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "A" "B" "C" "D" "E" "F"))) string)
+  (digitoHexadecimal
+   ("-" "hx" (or "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "A" "B" "C" "D" "E" "F") (arbno (or "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "A" "B" "C" "D" "E" "F"))) string)
+  ))
 
 ;Especificación Sintáctica (gramática)
 
