@@ -42,7 +42,7 @@
    ("%" (arbno (not #\newline))) skip)
   (identifier
    (letter (arbno (or letter digit "?"))) symbol)
-  (number
+  (digitoDecimal
    (digit (arbno digit)) number)
   (number
    ("-" digit (arbno digit)) number)))
@@ -50,50 +50,122 @@
 ;Especificación Sintáctica (gramática)
 
 (define grammar-simple-interpreter
-  '((program (expression) a-program)
-    (expression (number) lit-exp)
+  '((program ((arbno struct-decl) expression) a-program)
+    ;(expression (number) lit-exp)
+    (expression (numero-exp) num-exp)  
+
+    (numero-exp (digitoDecimal) decimal-num)
+    (numero-exp (digitoBinario) bin-num)
+    (numero-exp (digitoOctal) octal-num)
+    (numero-exp (digitoHexadecimal) hex-num)
+
     (expression (identifier) var-exp)
+    (expression ("\"" identifier (arbno identifier) "\"") cadena-exp)
     (expression ("true") true-exp)
     (expression ("false") false-exp)
-    (expression
-     (primitive "(" (separated-list expression ",")")")
-     primapp-exp)
-    (expression ("if" expression "then" expression "else" expression)
-                if-exp)
+
+    (expression ("list" "(" (separated-list expression ",") ")") lista-exp)
+    (expression ("cons" "(" expression expression ")") cons-exp)
+    (expression ("empty") empty-list-exp)
+    ;;Primitiva listas
+    (expression (primitivaListas "(" expression ")") prim-list-exp)
+    (primitivaListas ("first") first-primList)
+    (primitivaListas ("rest") rest-primList)
+    (primitivaListas ("empty?") empty-primList)
+
+    (expression ("if" expression "{" expression "else" expression "}") if-exp)
+
+    (expression ("func" "(" (separated-list identifier ",") ")" expression) func-exp)
+
+    ;;(expression ( "(" expression (arbno expression) ")") app-exp)
+    (expression ("call" expression "(" (separated-list expression ",") ")") app-exp)
+    
+    ;;;;;;
+    (expression ("(" expression primitive expression ")") prim-num-exp)
+    ;;primitivas numéricas
+    (primitive ("+") sum-prim)
+    (primitive ("-") minus-prim)
+    (primitive ("*") mult-prim)
+    (primitive ("mod") mod-prim)
+    (primitive ("pow") elevar-prim)
+    (primitive ("<") menor-prim)
+    (primitive (">") mayor-prim)
+    (primitive ("<=") menorigual-prim)
+    (primitive (">=") mayorigual-prim)
+    (primitive ("!=") diferente-prim)
+    (primitive ("==") igual-prim)
+    ;;expression para ligaduras modificables
+    (expression ("var" (arbno identifier "=" expression) "in" expression) lvar-exp)
     (expression ("let" (arbno identifier "=" expression) "in" expression)
                 let-exp)
-    (expression ("proc" "(" (separated-list identifier ",") ")" expression)
-                proc-exp)
-    (expression ( "(" expression (arbno expression) ")")
-                app-exp)
-    (expression ("letrec" (arbno identifier "(" (separated-list identifier ",") ")" "=" expression)  "in" expression) 
-                letrec-exp)
-    
     ; características adicionales
     (expression ("begin" expression (arbno ";" expression) "end")
                 begin-exp)
     (expression ("set" identifier "=" expression)
                 set-exp)
-    ;;;;;;
-    
-    (primitive ("+") add-prim)
-    (primitive ("-") substract-prim)
-    (primitive ("*") mult-prim)
-    (primitive ("add1") incr-prim)
-    (primitive ("sub1") decr-prim)
-    (primitive (">") mayor-prim)
-    (primitive ("==") igual-prim)
-    ;;expression para ligaduras modificables
-    (expression ("var" (arbno identifier "=" expression) "in" expression) lvar-exp)
-
     ;; struccturas
-    (struct-decl ("struct" identificador "{" (arbno identificador) "}") struct-exp)
+    (struct-decl ("struct" identifier "{" (arbno identifier) "}") struct-exp)
     ;;Instanciación y uso de estructuras
-    (expression ("new" identificador "(" (separated-list expression ",") ")") new-struct-exp)
-    ;;(expression ("get" expression "." identificador) get-struct-exp)
-    ;;(expression ("set-struct" expression "." identificador "=" expression) set-struct-exp)
+    (expression ("new" identifier "(" (separated-list expression ",") ")") new-struct-exp)
+    (expression ("get" expression "." identifier) get-struct-exp)
+    (expression ("set-struct" expression "." identifier "=" expression) set-struct-exp)
+
+    ;(expresion ("switch" "(" expresion ")" "{" (arbno "case" expresion ":" expresion) "default" ":" expresion "}") switch-exp)
+    (expression (primitivaCadena "(" (separated-list expression ",") ")") prim-cad-exp)
+    (primitivaCadena ("concat") concat-primCad)
+    (primitivaCadena ("string-length") length-primCad)
+    (primitivaCadena ("elementAt") index-primCad)
+    (expression ("while" expression "{" expression "}") while-exp)
     ))
 
+
+(define struct-decl->name
+  (lambda (struct)
+    (cases struct-decl struct
+      (struct-exp (struct-name field-list)
+        struct-name)
+      (else (eopl:error "struct no valida"))
+    )
+  )
+)
+
+(define struct-decl->atributos
+  (lambda (struct)
+    (cases struct-decl struct
+      (struct-exp (struct-name field-list)
+        field-list)
+      (else (eopl:error "struct no valida"))
+    )
+  )
+)
+
+(define struct-env '())
+
+(define elaborate-struct-decls!
+  (lambda (s-decls)
+    (set! struct-env s-decls)))
+
+(define lookup-struct
+  (lambda (name)
+    (let loop ((env struct-env))
+      (cond
+        [(null? env) (eopl:error "lookup-struct 'Unknown struct '" name)]
+        [(eqv? (struct-decl->name (car env)) name) (car env)]
+        [else (loop (cdr env))]
+      )
+    )
+  )
+)
+
+(define encontrar_atributo
+  (lambda (Latrib atributo acc)
+    (cond
+      [(null? Latrib) (eopl:error "No se encontro el atributo: " atributo)]
+      [(equal? (car Latrib) atributo) acc]
+      [else (encontrar_atributo (cdr Latrib) atributo (+ acc 1))]
+    )
+  )
+)
 
 ;Tipos de datos para la sintaxis abstracta de la gramática
 
@@ -182,7 +254,8 @@
 (define eval-program
   (lambda (pgm)
     (cases program pgm
-      (a-program (body)
+      (a-program (struc-dec body)
+                 (elaborate-struct-decls! struc-dec)
                  (eval-expression body (init-env))))))
 
 ; Ambiente inicial
@@ -204,33 +277,41 @@
   (lambda ()
     (extend-env
      '(x y z f)
-     (list 4 2 5 (closure '(y) (primapp-exp (mult-prim) (cons (var-exp 'y) (cons (primapp-exp (decr-prim) (cons (var-exp 'y) '())) '())))
-                      (empty-env)))
+     (list 4 2 5 2)
      (empty-env))))
-
-
 
 ;eval-expression: <expression> <enviroment> -> numero
 ; evalua la expresión en el ambiente de entrada
 (define eval-expression
   (lambda (exp env)
     (cases expression exp
-      (lit-exp (datum) datum)
+      ;(lit-exp (datum) datum)
+      (num-exp (tipo_numero)
+        (cases numero-exp tipo_numero
+          (decimal-num (dato)  dato)
+          (bin-num (dato)  dato)
+          (octal-num (dato) dato)
+          (hex-num (dato) dato)
+        )
+      )
       (var-exp (id) (apply-env env id))
       (true-exp () #T)
       (false-exp () #F)
-      (primapp-exp (prim rands)
-                   (let ((args (eval-rands rands env)))
-                     (apply-primitive prim args)))
+      (prim-num-exp (exp1 prim exp2)
+                   (let ((eexp1 (eval-expression exp1 env))
+                        (eexp2 (eval-expression exp2 env))
+                      )
+                     (apply-primitive prim eexp1 eexp2)))
+      (prim-cad-exp (prim rands)
+        (let ((args (eval-rands rands env)))
+          (apply-primitive_string prim args)
+        )
+      )
       (if-exp (test-exp true-exp false-exp)
               (if (eval-expression test-exp env)
                   (eval-expression true-exp env)
                   (eval-expression false-exp env)))
-      (let-exp (ids rands body)
-               (let ((args (eval-rands rands env)))
-                 (eval-expression body
-                                  (extend-env ids args env))))
-      (proc-exp (ids body)
+      (func-exp (ids body)
                 (closure ids body env))
       (app-exp (rator rands)
                (let ((proc (eval-expression rator env))
@@ -239,11 +320,9 @@
                      (apply-procedure proc args)
                      (eopl:error 'eval-expression
                                  "Attempt to apply non-procedure ~s" proc))))
-      (letrec-exp (proc-names idss bodies letrec-body)
-                  (eval-expression letrec-body
-                                   (extend-env-recursively proc-names idss bodies env)))
       (set-exp (id rhs-exp)
-        (modificar-env env id (eval-expression rhs-exp env)))
+        (modificar-env env id rhs-exp)
+        'void-exp)
       (begin-exp (exp exps) 
                  (let loop ((acc (eval-expression exp env))
                              (exps exps))
@@ -252,10 +331,77 @@
                         (loop (eval-expression (car exps) 
                                                env)
                               (cdr exps)))))
+      (let-exp (ids rands body)
+               (let ((args (eval-rands rands env)))
+                 (eval-expression body
+                                  (extend-env ids args env))))
       (lvar-exp (ids rands body)
-        (let ((args (eval-rands rands env)))
-          (eval-expression body (extend-mod-env ids (list->vector args) env))))
-      (new-struct-exp (identi lista_atributos) identi)
+        (let ((args (eval-rands rands (extend-mod-env ids (list->vector rands) env))))
+                 (eval-expression body
+                                  (extend-mod-env ids (list->vector args) env))))
+        ;(eval-expression body (extend-mod-env ids (list->vector rands) env)))
+      (cadena-exp (identificador Lidentifica)
+        (letrec
+          [
+            (crear_string
+              (lambda (lids)
+                (cond
+                  [(null? lids) ""]
+                  [else (string-append " " (symbol->string (car lids)) (crear_string (cdr lids)))]
+                )
+              )
+            )
+          ]
+          (string-append (symbol->string identificador) (crear_string Lidentifica))
+        )
+      ) 
+      (lista-exp (Lexp)
+        (eval-rands Lexp env))
+      (cons-exp (exp1 exp2)
+        (cons (eval-rand exp1 env) (eval-rand exp2 env)))
+      (prim-list-exp (prim exp)
+        (let ((arg (eval-rand exp env)))
+          (apply-list prim arg)))
+      (while-exp (boolean_exp body_exp)
+        (if (eval-expression boolean_exp env)
+          (
+            (eval-expression body_exp env)
+            (eval-expression (while-exp boolean_exp body_exp) env)
+          )
+          'void-exp
+        )
+      )
+      (empty-list-exp () '())
+      (new-struct-exp (identi lista_atributos)
+        (let 
+          [
+            (evalu_list (eval-rands lista_atributos env))          
+            (struct (lookup-struct identi))
+          ]
+          (if (= (length (struct-decl->atributos struct)) (length evalu_list))
+            (cons identi (list (struct-decl->atributos struct) (list->vector evalu_list)))
+            (eopl:error "Error el elemento no contiene la lista de atributos requerida, requerido:" (struct-decl->atributos struct))
+          )
+        )
+      )
+      (get-struct-exp (struc atributo)
+        (let
+          [
+            (struct (eval-rand struc env))
+          ]
+          (vector-ref (car (cddr struct)) (encontrar_atributo (cadr struct) atributo 0) )
+        )
+      )
+      (set-struct-exp (strucVar atributo nuevo_valor)
+        (letrec
+          [
+            (struct (eval-rand strucVar env))
+            (eNuevo_val (eval-rand nuevo_valor env))
+          ]
+          (vector-set! (car (cddr struct)) (encontrar_atributo (cadr struct) atributo 0 ) eNuevo_val)
+          'void-exp
+        )
+      )
     )
   )
 )
@@ -272,25 +418,155 @@
 
 ;operation: Aplicar una operación a la lista
 
-(define operation
-  (lambda (lst f acc)
-    (cond
-      [(null? lst) acc]
-      [else
-        (operation (cdr lst) f (f acc (car lst) ))])))
+;(define operation
+;  (lambda (lst f acc)
+;    (cond
+;      [(null? lst) acc]
+;      [else
+;        (operation (cdr lst) f (f acc (car lst) ))])))
 
+
+;calcula diferentes bases
+(define remove-char 
+  (lambda (str ch)
+    (cond
+      [(null? str) '()]
+      [else (if (not (char=? ch (car str)))
+        (cons (car str) (remove-char (cdr str) ch))
+        (remove-char (cdr str) ch))
+      ]
+    )
+  )
+)
+
+(define eliminar_caracter
+  (lambda (stri ch)
+    (list->string (remove-char (string->list stri) ch))
+  )
+)
+
+(define cambiar-char 
+  (lambda (str ch re_ch)
+    (cond
+      [(null? str) '()]
+      [else (if (not (char=? ch (car str)))
+        (cons (car str) (remove-char (cdr str) ch))
+        (cons re_ch (remove-char (cdr str) ch)))
+      ]
+    )
+  )
+)
+
+(define remplazar_caracter
+  (lambda (stri ch re_ch)
+    (list->string (cambiar-char (string->list stri) ch re_ch))
+  )
+)
+
+(define decimal-num->numero
+  (lambda (decimal)
+    (cases numero-exp decimal
+      (decimal-num (numero) numero)
+      (else (eopl:error "operacion con tipos diferentes es rechazada"))
+    )
+  )
+)
+
+(define bin-num->numero
+  (lambda (decimal)
+    (cases numero-exp decimal
+      (bin-num (numero) numero)
+      (else (eopl:error "operacion con tipos diferentes es rechazada"))
+    )
+  )
+)
+
+(define aplicar_segun_base
+  (lambda (operation arg1 arg2)
+    (cond
+      [(string? arg1)
+        (cond 
+          [(or (equal? (string-ref arg1 0) #\b) (and (equal? (string-ref arg1 1) #\b) (equal? (string-ref arg1 0) #\-)))
+            (parse-number 
+              (operation 
+                (string->number (eliminar_caracter arg1 #\b ) 2) 
+                (string->number (eliminar_caracter arg2 #\b ) 2)
+              ) 2)
+          ]
+          [(or (equal? (string-ref arg1 0) #\h) (and (equal? (string-ref arg1 1) #\h) (equal? (string-ref arg1 0) #\-)))
+            (parse-number 
+              (operation 
+                (string->number  (remplazar_caracter arg1 #\h #\# )  16) 
+                (string->number  (remplazar_caracter arg2 #\h #\# )  16)
+              ) 16)
+          ]
+          [(or (equal? (string-ref arg1 1) #\x) (and (equal? (string-ref arg1 2) #\x) (equal? (string-ref arg1 0) #\-)))
+            (parse-number 
+              (operation 
+                (string->number (eliminar_caracter arg1 #\x) 8) 
+                (string->number (eliminar_caracter arg2 #\x) 8)
+              ) 8)
+          ]
+          [else (display "mentira")]
+        )
+      ]
+      [else  (operation  arg1 arg2)]
+    )
+  )
+)
+
+(define parse-number
+  (lambda (num base)
+    (case base
+      [(2) (string-append "b" (number->string num 2))]
+      [(8) (string-append "0x" (number->string num 8))]
+      [(16) (string-append "hx" (string->number num 16))]
+      [else (eopl:error "Base no soportada")]
+    )
+  )
+)
+
+(define concat
+  (lambda (list_stri)
+    (cond
+      [(null? list_stri) ""]
+      [else (string-append (car list_stri ) (concat (cdr list_stri)))]
+    )
+  )
+)
 
 ;apply-primitive: <primitiva> <list-of-expression> -> numero
-(define apply-primitive
+(define apply-primitive_string
   (lambda (prim args)
+    (cases primitivaCadena prim
+      (concat-primCad () (concat args))
+      (length-primCad () (string-length (car args)))
+      (index-primCad ()  (string  (string-ref (car args) (cadr args))))
+      )))
+
+(define apply-primitive
+  (lambda (prim arg1 arg2)
     (cases primitive prim
-      (add-prim () (operation args + 0))
-      (substract-prim () (operation (cdr args) - (car args)))
-      (mult-prim () (operation args * 1))
-      (incr-prim () (+ (car args) 1))
-      (decr-prim () (- (car args) 1))
-      (mayor-prim () (> (car args) (cadr args)))
-      (igual-prim () (equal? (car args) (cadr args)))
+      (sum-prim () (aplicar_segun_base + arg1 arg2))
+      (minus-prim () (aplicar_segun_base - arg1 arg2))
+      (mult-prim () (aplicar_segun_base * arg1 arg2))
+      (mayor-prim () (aplicar_segun_base > arg1 arg2))
+      (menor-prim () (aplicar_segun_base < arg1 arg2))
+      (menorigual-prim () (aplicar_segun_base <= arg1 arg2))
+      (mayorigual-prim () (aplicar_segun_base >= arg1 arg2))
+      (diferente-prim () (aplicar_segun_base not (= arg1 arg2)))
+      (igual-prim () (equal? arg1 arg2))
+      (mod-prim () (aplicar_segun_base remainder arg1 arg2))
+      (elevar-prim () (aplicar_segun_base expt arg1 arg2))
+      )))
+
+; aplicar-primitiva lista
+(define apply-list
+  (lambda (prim arg)
+    (cases primitivaListas prim
+      (first-primList () (car arg))
+      (rest-primList () (cdr arg))
+      (empty-primList () (null? arg))
       )))
 
 ;true-value?: determina si un valor dado corresponde a un valor booleano falso o verdadero
@@ -306,12 +582,31 @@
    (body expression?)
    (env environment?)))
 
+(define mod_list_ids
+  (lambda (Lids Lval env)
+    (cond
+      [(null? Lids) 0]
+      [else ((modificar-env env (car Lids) (car Lval)) 
+      (mod_list_ids (cdr Lids) (cdr Lval) env))]
+    )
+  )
+)
+
 ;apply-procedure: evalua el cuerpo de un procedimientos en el ambiente extendido correspondiente
 (define apply-procedure
   (lambda (proc args)
     (cases procval proc
       (closure (ids body env)
-               (eval-expression body (extend-env ids args env))))))
+        (cases environment env
+          (extend-mod-env (lid lval next-env) 
+            (eval-expression body (extend-env ids args env))
+          )
+          (else (eval-expression body (extend-env ids args env)))
+        )
+      )
+    )
+  )
+)
 
 ;*******************************************************************************************
 ;Ambientes
@@ -326,12 +621,12 @@
   (extend-mod-env
    (syms (list-of symbol?))
    (valores vector?)
-   (env environment?))
-  (extended-env-record
-    (nombre-procedimientos (list-of symbol?))
-    (argumentos-proc (list-of (list-of symbol?)))
-    (cuerpos-proc (list-of expression?))
-    (old-env environment?)))
+   (env environment?)))
+  ;(extended-env-record
+  ;  (nombre-procedimientos (list-of symbol?))
+  ;  (argumentos-proc (list-of (list-of symbol?)))
+  ;  (cuerpos-proc (list-of expression?))
+  ;  (old-env environment?)))
 
 (define scheme-value? (lambda (v) #t))
 
@@ -348,18 +643,6 @@
 ;  (lambda (syms vals env)
 ;    (extended-env-record syms (list->vector vals) env)))
 
-;extend-env-recursively: <list-of symbols> <list-of <list-of symbols>> <list-of expressions> environment -> environment
-;función que crea un ambiente extendido para procedimientos recursivos
-(define extend-env-recursively
-  (lambda (proc-names idss bodies old-env)
-    (let ((len (length proc-names)))
-      (let ((vec (make-vector len)))
-        (let ((env (extended-env-record proc-names vec old-env)))
-          (for-each
-            (lambda (pos ids body)
-              (vector-set! vec pos (closure ids body env)))
-            (iota len) idss bodies)
-          env)))))
 
 ;iota: number -> list
 ;función que retorna una lista de los números desde 0 hasta end
@@ -390,11 +673,16 @@
   ) 
 )
 (define buscador_mod
-  (lambda (lid lval valBus next-amb acc)
+  (lambda (lid lval valBus next-amb acc env )
     (cond
       [(null? lid) (apply-env next-amb valBus)]
-      [(equal? (car lid) valBus) (vector-ref lval acc)]
-      [else (buscador (cdr lid) (cdr lval) valBus next-amb (+ acc 1))]
+      [(equal? (car lid) valBus) 
+        (if (expression? (vector-ref lval acc)) 
+        (eval-expression (vector-ref lval acc) env)
+        (vector-ref lval acc)
+        )
+      ]
+      [else (buscador_mod (cdr lid) lval valBus next-amb (+ acc 1) env)]
     )  
   ) 
 )
@@ -408,7 +696,7 @@
         (buscador lid lval sym next-env)
       )
       (extend-mod-env (lid lval next-env)
-        (buscador_mod lid lval sym next-env 0)
+        (buscador_mod lid lval sym next-env 0 env)
       )
       (else (eopl:error "variable no encontrada"))
     ) 
@@ -466,7 +754,7 @@
             (encontrar_indice
               (lambda (Lsym acc)
                 (cond
-                  [(null? Lsym) (eopl:error "indice no encontrado")]
+                  [(null? Lsym) (eopl:error "indice no encontrado " sym)]
                   [(equal? (car Lsym) sym) acc]
                   [else (encontrar_indice (cdr Lsym) (+ acc 1))]
                 )
@@ -476,7 +764,10 @@
           (vector-set! Vect (encontrar_indice symB 0) val)
         )
       )
-      (else (eopl:error "no se puede modificar un ligadura let"))
+      (extend-env (symB list next-env)
+        (modificar-env next-env sym val)
+      )
+      (else (eopl:error "variable no encontrada en un ambiente valido"))
     )
   )
 )
@@ -509,39 +800,8 @@
 ;Pruebas
 
 (show-the-datatypes)
-just-scan
-scan&parse
-(just-scan "add1(x)")
-(just-scan "add1(   x   )%cccc")
-(just-scan "add1(  +(5, x)   )%cccc")
-(just-scan "add1(  +(5, %ccccc x) ")
-(scan&parse "add1(x)")
-(scan&parse "add1(   x   )%cccc")
-(scan&parse "add1(  +(5, x)   )%cccc")
-(scan&parse "add1(  +(5, %cccc
-x)) ")
-(scan&parse "if -(x,4) then +(y,11) else *(y,10)")
-(scan&parse "let
-x = -(y,1)
-in
-let
-x = +(x,2)
-in
-add1(x)")
 
-(define caso1 (primapp-exp (incr-prim) (list (lit-exp 5))))
-(define exp-numero (lit-exp 8))
-(define exp-ident (var-exp 'c))
-(define exp-app (primapp-exp (add-prim) (list exp-numero exp-ident)))
-(define programa (a-program exp-app))
-(define una-expresion-dificil (primapp-exp (mult-prim)
-                                           (list (primapp-exp (incr-prim)
-                                                              (list (var-exp 'v)
-                                                                    (var-exp 'y)))
-                                                 (var-exp 'x)
-                                                 (lit-exp 200))))
-(define un-programa-dificil
-    (a-program una-expresion-dificil))
+;(define un-programa-dificil (a-program una-expresion-dificil))
 
 ;; Descomentar para pruebas, vuelva a comentar para envitar
 (interpretador)
@@ -551,3 +811,4 @@ No tocar
 Exporar funciones
 |#
 (provide (all-defined-out)) 
+
