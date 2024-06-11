@@ -128,6 +128,10 @@
     (primitivaCadena ("concat") concat-primCad)
     (primitivaCadena ("string-length") length-primCad)
     (primitivaCadena ("elementAt") index-primCad)
+
+    
+    ;;Iteradores
+    (expression ("for" identifier "from" expression "until" expression "by" expression "do" expression) for-exp)
     (expression ("while" expression "{" expression "}") while-exp)
     ))
 
@@ -334,8 +338,11 @@
                      (eopl:error 'eval-expression
                                  "Attempt to apply non-procedure ~s" proc))))
       (set-exp (id rhs-exp)
-        (modificar-env env id rhs-exp)
-        'void-exp)
+        (let ((argu (eval-expression rhs-exp env)))
+          (modificar-env env id argu)
+          'void-exp)
+        )
+        
       (begin-exp (exp exps) 
                  (let loop ((acc (eval-expression exp env))
                              (exps exps))
@@ -376,13 +383,22 @@
         (let ((arg (eval-rand exp env)))
           (apply-list prim arg)))
       (while-exp (boolean_exp body_exp)
-        (if (eval-expression boolean_exp env)
-          (
-            (eval-expression body_exp env)
-            (eval-expression (while-exp boolean_exp body_exp) env)
-          )
-          'void-exp
-        )
+        (let loop ()
+          (if (eval-expression boolean_exp env)
+              (begin
+                (eval-expression body_exp env)
+                (loop))
+              'void-exp))
+      )
+      (for-exp (var start-exp end-exp sum-exp body-exp)
+        (let ((start (eval-expression start-exp env))
+              (end (eval-expression end-exp env))
+              (sum (eval-expression sum-exp env))
+            )
+          (let loop ((i start))
+            (when (< i end)
+              (eval-expression body-exp (extend-env (list var) (list i) env))
+              (loop (+ i sum)))))
       )
       (empty-list-exp () '())
       (new-struct-exp (identi lista_atributos)
@@ -495,26 +511,26 @@
 )
 
 (define aplicar_segun_base
-  (lambda (operation arg1 arg2)
+  (lambda (operation arg1 arg2 tratamiento)
     (cond
       [(string? arg1)
         (cond 
           [(or (equal? (string-ref arg1 0) #\b) (and (equal? (string-ref arg1 1) #\b) (equal? (string-ref arg1 0) #\-)))
-            (parse-number 
+            (tratamiento 
               (operation 
                 (string->number (eliminar_caracter arg1 #\b ) 2) 
                 (string->number (eliminar_caracter arg2 #\b ) 2)
               ) 2)
           ]
           [(or (equal? (string-ref arg1 0) #\h) (and (equal? (string-ref arg1 1) #\h) (equal? (string-ref arg1 0) #\-)))
-            (parse-number 
+            (tratamiento 
               (operation 
                 (string->number  (remplazar_caracter arg1 #\h #\# )  16) 
                 (string->number  (remplazar_caracter arg2 #\h #\# )  16)
               ) 16)
           ]
           [(or (equal? (string-ref arg1 1) #\x) (and (equal? (string-ref arg1 2) #\x) (equal? (string-ref arg1 0) #\-)))
-            (parse-number 
+            (tratamiento 
               (operation 
                 (string->number (eliminar_caracter arg1 #\x) 8) 
                 (string->number (eliminar_caracter arg2 #\x) 8)
@@ -539,6 +555,11 @@
   )
 )
 
+
+(define retorno_tal_cual
+  (lambda (out base) out)
+)
+
 (define concat
   (lambda (list_stri)
     (cond
@@ -560,17 +581,17 @@
 (define apply-primitive
   (lambda (prim arg1 arg2)
     (cases primitive prim
-      (sum-prim () (aplicar_segun_base + arg1 arg2))
-      (minus-prim () (aplicar_segun_base - arg1 arg2))
-      (mult-prim () (aplicar_segun_base * arg1 arg2))
-      (mayor-prim () (aplicar_segun_base > arg1 arg2))
-      (menor-prim () (aplicar_segun_base < arg1 arg2))
-      (menorigual-prim () (aplicar_segun_base <= arg1 arg2))
-      (mayorigual-prim () (aplicar_segun_base >= arg1 arg2))
-      (diferente-prim () (aplicar_segun_base not (= arg1 arg2)))
+      (sum-prim () (aplicar_segun_base + arg1 arg2 parse-number ))
+      (minus-prim () (aplicar_segun_base - arg1 arg2 parse-number))
+      (mult-prim () (aplicar_segun_base * arg1 arg2 parse-number))
+      (mayor-prim () (aplicar_segun_base > arg1 arg2 retorno_tal_cual))
+      (menor-prim () (aplicar_segun_base < arg1 arg2 retorno_tal_cual))
+      (menorigual-prim () (aplicar_segun_base <= arg1 arg2 retorno_tal_cual))
+      (mayorigual-prim () (aplicar_segun_base >= arg1 arg2 retorno_tal_cual))
+      (diferente-prim ()( not (equal? arg1 arg2)))
       (igual-prim () (equal? arg1 arg2))
-      (mod-prim () (aplicar_segun_base remainder arg1 arg2))
-      (elevar-prim () (aplicar_segun_base expt arg1 arg2))
+      (mod-prim () (aplicar_segun_base remainder arg1 arg2 parse-number))
+      (elevar-prim () (aplicar_segun_base expt arg1 arg2 parse-number))
       )))
 
 ; aplicar-primitiva lista
@@ -691,8 +712,8 @@
       [(null? lid) (apply-env next-amb valBus)]
       [(equal? (car lid) valBus) 
         (if (expression? (vector-ref lval acc)) 
-        (eval-expression (vector-ref lval acc) env)
-        (vector-ref lval acc)
+          (eval-expression (vector-ref lval acc) env)
+          (vector-ref lval acc)
         )
       ]
       [else (buscador_mod (cdr lid) lval valBus next-amb (+ acc 1) env)]
@@ -704,14 +725,13 @@
 (define apply-env
   (lambda (env sym)
     (cases environment env
-      (empty-env () (eopl:error "variable no encontrada"))
+      (empty-env () (eopl:error "variable no encontrada " sym))
       (extend-env (lid lval next-env)
         (buscador lid lval sym next-env)
       )
       (extend-mod-env (lid lval next-env)
         (buscador_mod lid lval sym next-env 0 env)
       )
-      (else (eopl:error "variable no encontrada"))
     ) 
   )
 )
