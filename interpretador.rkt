@@ -123,7 +123,6 @@
     (expression ("get" expression "." identifier) get-struct-exp)
     (expression ("set-struct" expression "." identifier "=" expression) set-struct-exp)
 
-    ;(expresion ("switch" "(" expresion ")" "{" (arbno "case" expresion ":" expresion) "default" ":" expresion "}") switch-exp)
     (expression (primitivaCadena "(" (separated-list expression ",") ")") prim-cad-exp)
     (primitivaCadena ("concat") concat-primCad)
     (primitivaCadena ("string-length") length-primCad)
@@ -133,6 +132,18 @@
     ;;Iteradores
     (expression ("for" identifier "from" expression "until" expression "by" expression "do" expression) for-exp)
     (expression ("while" expression "{" expression "}") while-exp)
+    
+    ;;Switch
+    (expression ("switch" "(" expression ")" "{" (arbno "case" expression ":" expression) "default" ":" expression "}") switch-exp)
+
+
+    (expression ("array" "(" (separated-list expression ",") ")") array-exp)
+    ;;Primitiva arrays
+    (primitivaArray ("length") length-primArr)
+    (primitivaArray ("index") index-primArr)
+    (primitivaArray ("slice") slice-primArr)
+    (primitivaArray ("setlist") setlist-primArr)
+    (expression (primitivaArray "(" (separated-list expression ",") ")") prim-array-exp)
     ))
 
 
@@ -400,6 +411,27 @@
               (eval-expression body-exp (extend-env (list var) (list i) env))
               (loop (+ i sum)))))
       )
+      (switch-exp (var_exp list_caso list_exp default_exp)
+        (letrec ((valor (eval-expression var_exp env))
+            (coinciden
+              (lambda (caso list_e valor)
+                (cond
+                  [(null? caso) (eval-expression default_exp env)]
+                  [(equal? valor (eval-expression (car caso) env)) (eval-expression (car list_e) env)]
+                  [else (coinciden (cdr caso) (cdr list_e) valor)]
+                )
+              )
+            )
+          )
+          (coinciden list_caso list_exp valor)
+        )
+      )
+      (array-exp (lista) 
+        (list->vector (eval-rands lista env))
+      )
+      (prim-array-exp (primitiva lista_argumentos)
+        (primitiva-array primitiva (eval-rands lista_argumentos env))
+      )
       (empty-list-exp () '())
       (new-struct-exp (identi lista_atributos)
         (let 
@@ -602,6 +634,29 @@
       (rest-primList () (cdr arg))
       (empty-primList () (null? arg))
       )))
+
+(define subvector
+  (lambda (vect inicio final)
+    (cond
+      [(= inicio final) (cons (vector-ref vect inicio) '())]
+      [else (cons (vector-ref vect inicio) (subvector vect (+ inicio 1) final))]
+    )
+  )
+)
+
+(define primitiva-array
+  (lambda (prim arg)
+    (cases primitivaArray prim
+      (length-primArr () (vector-length (car arg)))
+      (index-primArr () (vector-ref (car arg) (cadr arg)))
+      (slice-primArr () (list->vector (subvector  (car arg) (cadr arg) (caddr arg))))
+      (setlist-primArr () 
+        (vector-set! (car arg) (cadr arg) (cadr arg))
+        (car arg)
+      )   
+    )
+  )
+)
 
 ;true-value?: determina si un valor dado corresponde a un valor booleano falso o verdadero
 (define true-value?
