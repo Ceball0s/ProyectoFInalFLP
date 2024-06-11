@@ -144,6 +144,17 @@
     (primitivaArray ("slice") slice-primArr)
     (primitivaArray ("setlist") setlist-primArr)
     (expression (primitivaArray "(" (separated-list expression ",") ")") prim-array-exp)
+
+    ;;Reconocimiento de patrones
+    (expression ("match" expression "{" (arbno regular-exp "=>" expression) "}") match-exp)
+    ;;Expresiones regulares
+    (regular-exp (identifier "::" identifier) list-match-exp)
+    (regular-exp ("numero" "(" identifier ")") num-match-exp)
+    (regular-exp ("cadena" "(" identifier ")") cad-match-exp)
+    (regular-exp ("boolean" "(" identifier ")") bool-match-exp)
+    (regular-exp ("array" "(" (separated-list identifier ",") ")") array-match-exp)
+    (regular-exp ("empty") empty-match-exp)
+    (regular-exp ("default") default-match-exp)
     ))
 
 
@@ -433,6 +444,9 @@
         (primitiva-array primitiva (eval-rands lista_argumentos env))
       )
       (empty-list-exp () '())
+      (match-exp (exp_var list_casos lista_exp)
+        4
+      )
       (new-struct-exp (identi lista_atributos)
         (let 
           [
@@ -651,7 +665,7 @@
       (index-primArr () (vector-ref (car arg) (cadr arg)))
       (slice-primArr () (list->vector (subvector  (car arg) (cadr arg) (caddr arg))))
       (setlist-primArr () 
-        (vector-set! (car arg) (cadr arg) (cadr arg))
+        (vector-set! (car arg) (cadr arg) (caddr arg))
         (car arg)
       )   
     )
