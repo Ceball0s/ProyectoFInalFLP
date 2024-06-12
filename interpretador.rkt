@@ -445,7 +445,31 @@
       )
       (empty-list-exp () '())
       (match-exp (exp_var list_casos lista_exp)
-        4
+        (let ((valor (eval-expression exp_var env)))
+          (detector_patron valor list_casos lista_exp env)
+        )
+        
+        
+        ;(letrec ((valor (eval-expression exp_var env))
+        ;    (encontrar_valor
+        ;      (lambda (valor)
+        ;        (cond
+        ;          [(number? valor)]
+        ;          [(list? valor)]
+        ;          [(bool? valor)]
+        ;          [(bool? valor)]
+        ;        )
+        ;      ;  (cond
+        ;      ;    [(null? caso) (eval-expression default_exp env)]
+        ;      ;    [(equal? valor (eval-expression (car caso) env)) (eval-expression (car list_e) env)]
+        ;      ;    [else (coinciden (cdr caso) (cdr list_e) valor)]
+        ;      ;  )
+        ;
+        ;      )
+        ;    )
+        ;  )
+        ;  (coinciden list_caso list_exp valor)
+        ;)
       )
       (new-struct-exp (identi lista_atributos)
         (let 
@@ -668,6 +692,62 @@
         (vector-set! (car arg) (cadr arg) (caddr arg))
         (car arg)
       )   
+    )
+  )
+)
+
+;
+(define detector_patron 
+  (lambda (valor primt_match expresi_match env)
+    (cases regular-exp (car primt_match)
+      (empty-match-exp () 
+        (if (and (list? valor ) (equal? (car valor) '()))
+          (eval-expression (car expresi_match) env)
+          (detector_patron valor (cdr primt_match) (cdr expresi_match) env)
+        )
+      )
+      (list-match-exp (cabeza cola) 
+        (if (list? valor)
+          (eval-expression (car expresi_match) (extend-env (cons cabeza (cons cola '())) valor env))
+          (detector_patron valor (cdr primt_match) (cdr expresi_match) env)
+        )
+      )
+      (num-match-exp (ids) 
+        (if (number? valor)
+          (eval-expression (car expresi_match) (extend-env (list ids) (list valor) env))
+          (detector_patron valor (cdr primt_match) (cdr expresi_match) env)
+        )
+      )
+      (cad-match-exp (ids) 
+        (if (string? valor)
+          (eval-expression (car expresi_match) (extend-env (list ids) (list valor) env))
+          (detector_patron valor (cdr primt_match) (cdr expresi_match) env)
+        )
+      )
+      (bool-match-exp (ids) 
+        (if (boolean? valor)
+          (eval-expression (car expresi_match) (extend-env (list ids) (list valor) env))
+          (detector_patron valor (cdr primt_match) (cdr expresi_match) env)
+        )
+      )
+      (array-match-exp (ids) 
+        (if (vector? valor)
+          (eval-expression (car expresi_match) (extend-env ids (asignar_array ids valor 0) env))
+          (detector_patron valor (cdr primt_match) (cdr expresi_match) env)
+        )
+      )
+      (default-match-exp () 
+        (eval-expression (car expresi_match) env)
+      )
+    )
+  )
+)
+
+(define asignar_array
+  (lambda (lis_ids vect acc)
+    (cond
+      [(null? (cdr lis_ids)) (cons (subvector vect acc (- (vector-length vect) 1)) '())]
+      [else (cons (vector-ref vect acc) (asignar_array (cdr lis_ids) vect (+ acc 1)))]
     )
   )
 )
