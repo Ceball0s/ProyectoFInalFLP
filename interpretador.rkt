@@ -58,6 +58,10 @@
    ("hx" (or "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "A" "B" "C" "D" "E" "F") (arbno (or "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "A" "B" "C" "D" "E" "F"))) string)
   (digitoHexadecimal
    ("-" "hx" (or "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "A" "B" "C" "D" "E" "F") (arbno (or "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "A" "B" "C" "D" "E" "F"))) string)
+  (flotante
+   (digit (arbno digit) "." digit (arbno digit)) number)
+  (flotante
+   ("-" digit (arbno digit) "." digit (arbno digit)) number)
   ))
 
 ;Especificación Sintáctica (gramática)
@@ -356,7 +360,7 @@
                (let ((proc (eval-expression rator env))
                      (args (eval-rands rands env)))
                  (if (procval? proc)
-                     (apply-procedure proc args)
+                     (apply-procedure proc args env)
                      (eopl:error 'eval-expression
                                  "Attempt to apply non-procedure ~s" proc))))
       (set-exp (id rhs-exp)
@@ -381,7 +385,6 @@
         (let ((args (eval-rands rands (extend-mod-env ids (list->vector rands) env))))
                  (eval-expression body
                                   (extend-mod-env ids (list->vector args) env))))
-        ;(eval-expression body (extend-mod-env ids (list->vector rands) env)))
       (cadena-exp (identificador Lidentifica)
         (letrec
           [
@@ -405,12 +408,13 @@
         (let ((arg (eval-rand exp env)))
           (apply-list prim arg)))
       (while-exp (boolean_exp body_exp)
-        (let loop ()
-          (if (eval-expression boolean_exp env)
-              (begin
+          (cond 
+              [(eval-expression boolean_exp env)
                 (eval-expression body_exp env)
-                (loop))
-              'void-exp))
+                (eval-expression exp env)
+              ]
+              [else 'void-exp]
+          )
       )
       (for-exp (var start-exp end-exp sum-exp body-exp)
         (let ((start (eval-expression start-exp env))
@@ -448,28 +452,6 @@
         (let ((valor (eval-expression exp_var env)))
           (detector_patron valor list_casos lista_exp env)
         )
-        
-        
-        ;(letrec ((valor (eval-expression exp_var env))
-        ;    (encontrar_valor
-        ;      (lambda (valor)
-        ;        (cond
-        ;          [(number? valor)]
-        ;          [(list? valor)]
-        ;          [(bool? valor)]
-        ;          [(bool? valor)]
-        ;        )
-        ;      ;  (cond
-        ;      ;    [(null? caso) (eval-expression default_exp env)]
-        ;      ;    [(equal? valor (eval-expression (car caso) env)) (eval-expression (car list_e) env)]
-        ;      ;    [else (coinciden (cdr caso) (cdr list_e) valor)]
-        ;      ;  )
-        ;
-        ;      )
-        ;    )
-        ;  )
-        ;  (coinciden list_caso list_exp valor)
-        ;)
       )
       (new-struct-exp (identi lista_atributos)
         (let 
@@ -616,14 +598,20 @@
 
 (define parse-number
   (lambda (num base)
-    (case base
-      [(2) (string-append "b" (number->string num 2))]
-      [(8) (string-append "0x" (number->string num 8))]
-      [(16) (string-append "hx" (string->number num 16))]
-      [else (eopl:error "Base no soportada")]
+    (let* ((negative? (< num 0))
+           (abs-num (abs num)))
+      (case base
+        [(2) (if negative? (string-append "-"  (string-append "b" (number->string abs-num 2)))  (string-append "b" (number->string abs-num 2)))]
+        [(8) (if negative? (string-append "-"  (string-append "0x" (number->string abs-num 8)))  (string-append "0x" (number->string abs-num 8)))]
+        [(16) (if negative? (string-append "-"  (string-append "hx" (number->string abs-num 16)))  (string-append "hx" (number->string abs-num 16)))]
+        [else (eopl:error "Base no soportada")]
+      )
     )
   )
 )
+
+
+
 
 
 (define retorno_tal_cual
@@ -708,14 +696,27 @@
       )
       (list-match-exp (cabeza cola) 
         (if (list? valor)
-          (eval-expression (car expresi_match) (extend-env (cons cabeza (cons cola '())) valor env))
+          (eval-expression (car expresi_match) (extend-env (cons cabeza (cons cola '())) (list (car valor) (cdr valor)) env))
           (detector_patron valor (cdr primt_match) (cdr expresi_match) env)
         )
       )
       (num-match-exp (ids) 
         (if (number? valor)
           (eval-expression (car expresi_match) (extend-env (list ids) (list valor) env))
-          (detector_patron valor (cdr primt_match) (cdr expresi_match) env)
+          (cond
+            [(or (equal? (string-ref valor 0) #\b) (and (equal? (string-ref valor 1) #\b) (equal? (string-ref valor 0) #\-)))
+              (eval-expression (car expresi_match) (extend-env (list ids) (list valor) env))
+            ]
+            [(or (equal? (string-ref valor 0) #\h) (and (equal? (string-ref valor 1) #\h) (equal? (string-ref valor 0) #\-)))
+              (eval-expression (car expresi_match) (extend-env (list ids) (list valor) env))
+            ]
+            [(or (equal? (string-ref valor 1) #\x) (and (equal? (string-ref valor 2) #\x) (equal? (string-ref valor 0) #\-)))
+              (eval-expression (car expresi_match) (extend-env (list ids) (list valor) env))
+            ]
+            [else (detector_patron valor (cdr primt_match) (cdr expresi_match) env)]
+          )
+
+          
         )
       )
       (cad-match-exp (ids) 
@@ -777,14 +778,14 @@
 
 ;apply-procedure: evalua el cuerpo de un procedimientos en el ambiente extendido correspondiente
 (define apply-procedure
-  (lambda (proc args)
+  (lambda (proc args envI)
     (cases procval proc
       (closure (ids body env)
         (cases environment env
           (extend-mod-env (lid lval next-env) 
-            (eval-expression body (extend-env ids args env))
+            (eval-expression body (extend-env ids args envI))
           )
-          (else (eval-expression body (extend-env ids args env)))
+          (else (eval-expression body (extend-env ids args envI)))
         )
       )
     )
