@@ -461,6 +461,9 @@
   (lambda (a b)
   (or (and a (not b)) (and (not a) b))))
 
+(define not-func
+  (lambda (a)
+  (not a)))
 
 (define evaluar_booleano
   (lambda (prim args)
@@ -468,7 +471,7 @@
       (and-prim () (evaluar_lista and-func args))
       (or-prim () (evaluar_lista or-func args))
       (xor-prim () (evaluar_lista xor-func args))
-      (not-prim () (not (car args)))
+      (not-prim () (evaluar_lista not-func args))
     )
   )
 )
