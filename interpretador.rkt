@@ -656,7 +656,7 @@
   (lambda (valor primt_match expresi_match env)
     (cases regular-exp (car primt_match)
       (empty-match-exp () 
-        (if (and (list? valor ) (equal? (car valor) '()))
+        (if (null? valor)
           (eval-expresion (car expresi_match) env)
           (detector_patron valor (cdr primt_match) (cdr expresi_match) env)
         )
