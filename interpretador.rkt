@@ -77,8 +77,30 @@
     (numero-exp (digitoHexadecimal) hex-num)
     (numero-exp (flotante) flotante-num)
 
+    ;numeritos
+    (expresion ("(" expresion primitive expresion ")") prim-num-exp)
+    ;;primitivas numéricas
+    (primitive ("+") sum-prim)
+    (primitive ("-") minus-prim)
+    (primitive ("*") mult-prim)
+    (primitive ("mod") mod-prim)
+    (primitive ("pow") elevar-prim)
+    (primitive ("<") menor-prim)
+    (primitive (">") mayor-prim)
+    (primitive ("<=") menorigual-prim)
+    (primitive (">=") mayorigual-prim)
+    (primitive ("!=") diferente-prim)
+    (primitive ("==") igual-prim)
+
+
     (expresion (identificador) var-exp)
     (expresion ("\"" identificador (arbno identificador) "\"") cadena-exp)
+    ;cadenas
+    (expresion (primitivaCadena "(" (separated-list expresion ",") ")") prim-cad-exp)
+    (primitivaCadena ("concat") concat-primCad)
+    (primitivaCadena ("string-length") length-primCad)
+    (primitivaCadena ("elementAt") index-primCad)
+
     (expresion ("true") true-exp)
     (expresion ("false") false-exp)
 
@@ -97,20 +119,7 @@
 
     (expresion ("call" expresion "(" (separated-list expresion ",") ")") app-exp)
     
-    ;numeritos
-    (expresion ("(" expresion primitive expresion ")") prim-num-exp)
-    ;;primitivas numéricas
-    (primitive ("+") sum-prim)
-    (primitive ("-") minus-prim)
-    (primitive ("*") mult-prim)
-    (primitive ("mod") mod-prim)
-    (primitive ("pow") elevar-prim)
-    (primitive ("<") menor-prim)
-    (primitive (">") mayor-prim)
-    (primitive ("<=") menorigual-prim)
-    (primitive (">=") mayorigual-prim)
-    (primitive ("!=") diferente-prim)
-    (primitive ("==") igual-prim)
+    
     ;;expresion para ligaduras modificables
     (expresion ("var" (arbno identificador "=" expresion) "in" expresion) lvar-exp)
     (expresion ("let" (arbno identificador "=" expresion) "in" expresion)
@@ -127,11 +136,6 @@
     (expresion ("get" expresion "." identificador) get-struct-exp)
     (expresion ("set-struct" expresion "." identificador "=" expresion) set-struct-exp)
 
-    (expresion (primitivaCadena "(" (separated-list expresion ",") ")") prim-cad-exp)
-    (primitivaCadena ("concat") concat-primCad)
-    (primitivaCadena ("string-length") length-primCad)
-    (primitivaCadena ("elementAt") index-primCad)
-
     
     ;;Iteradores
     (expresion ("for" identificador "from" expresion "until" expresion "by" expresion "do" expresion) for-exp)
@@ -139,15 +143,6 @@
     
     ;;Switch
     (expresion ("switch" "(" expresion ")" "{" (arbno "case" expresion ":" expresion) "default" ":" expresion "}") switch-exp)
-
-
-    (expresion ("array" "(" (separated-list expresion ",") ")") array-exp)
-    ;;Primitiva arrays
-    (primitivaArray ("length") length-primArr)
-    (primitivaArray ("index") index-primArr)
-    (primitivaArray ("slice") slice-primArr)
-    (primitivaArray ("setlist") setlist-primArr)
-    (expresion (primitivaArray "(" (separated-list expresion ",") ")") prim-array-exp)
 
     ;;Reconocimiento de patrones
     (expresion ("match" expresion "{" (arbno regular-exp "=>" expresion) "}") match-exp)
@@ -166,6 +161,14 @@
     (primitivaBooleana ("xor") xor-prim)
     (primitivaBooleana ("not") not-prim)
     (expresion (primitivaBooleana "(" (separated-list expresion ",") ")") prim-bool-exp)
+
+    (expresion ("array" "(" (separated-list expresion ",") ")") array-exp)
+    ;;Primitiva arrays
+    (primitivaArray ("length") length-primArr)
+    (primitivaArray ("index") index-primArr)
+    (primitivaArray ("slice") slice-primArr)
+    (primitivaArray ("setlist") setlist-primArr)
+    (expresion (primitivaArray "(" (separated-list expresion ",") ")") prim-array-exp)
     ))
 
 ; funciones structuras
@@ -282,10 +285,10 @@
       (true-exp () #T)
       (false-exp () #F)
       (prim-num-exp (exp1 prim exp2)
-                   (let ((eexp1 (eval-expresion exp1 env))
-                        (eexp2 (eval-expresion exp2 env))
-                      )
-                     (apply-primitive prim eexp1 eexp2)))
+        (let ((Evaluated_exp1 (eval-expresion exp1 env))
+            (Evaluated_exp2 (eval-expresion exp2 env))
+          )
+          (apply-primitive prim Evaluated_exp1 Evaluated_exp2)))
       (prim-cad-exp (prim rands)
         (let ((args (eval-rands rands env)))
           (apply-primitive_string prim args)
@@ -303,21 +306,15 @@
                  (if (procval? proc)
                      (apply-procedure proc args env)
                      (eopl:error 'eval-expresion
-                                 "Attempt to apply non-procedure ~s" proc))))
-      (set-exp (id rhs-exp)
-        (let ((argu (eval-expresion rhs-exp env)))
-          (modificar-env env id argu)
-          'void-exp)
-        )
-        
+                                 "Attempt to apply non-procedure ~s" proc)))) 
       (begin-exp (exp exps) 
-                 (let loop ((acc (eval-expresion exp env))
-                             (exps exps))
-                    (if (null? exps) 
-                        acc
-                        (loop (eval-expresion (car exps) 
-                                               env)
-                              (cdr exps)))))
+        (let loop ((acc (eval-expresion exp env))
+                    (exps exps))
+          (if (null? exps) 
+              acc
+              (loop (eval-expresion (car exps) 
+                                      env)
+                    (cdr exps)))))
       (let-exp (ids rands body)
                (let ((args (eval-rands rands env)))
                  (eval-expresion body
@@ -326,6 +323,11 @@
         (let ((args (eval-rands rands (extend-mod-env ids (list->vector rands) env))))
                  (eval-expresion body
                                   (extend-mod-env ids (list->vector args) env))))
+      (set-exp (id rhs-exp)
+        (let ((argu (eval-expresion rhs-exp env)))
+          (modificar-env env id argu)
+          'void-exp)
+        )
       (cadena-exp (identificador Lidentifica)
         (letrec
           [
@@ -346,7 +348,7 @@
       (cons-exp (exp1 exp2)
         (cons (eval-rand exp1 env) (eval-rand exp2 env)))
       (prim-list-exp (prim exp)
-        (let ((arg (eval-rand exp env)))
+        (let ((arg (eval-expresion exp env)))
           (apply-list prim arg)))
       (while-exp (boolean_exp body_exp)
           (cond 
@@ -461,7 +463,6 @@
   (lambda (a b)
   (or (and a (not b)) (and (not a) b))))
 
-
 (define evaluar_booleano
   (lambda (prim args)
     (cases primitivaBooleana prim 
@@ -472,7 +473,6 @@
     )
   )
 )
-
 
 ;; metodos para numeros
 ;calcula diferentes bases
@@ -539,8 +539,8 @@
             (tratamiento 
               (operation 
                 (string->number (eliminar_caracter arg1 #\b ) 2) 
-                (string->number (eliminar_caracter arg2 #\b ) 2)
-              ) 2)
+                (string->number (eliminar_caracter arg2 #\b ) 2)) 
+              2)
           ]
           [(or (equal? (string-ref arg1 0) #\h) (and (equal? (string-ref arg1 1) #\h) (equal? (string-ref arg1 0) #\-)))
             (tratamiento 
@@ -569,9 +569,9 @@
     (let* ((negative? (< num 0))
            (abs-num (abs num)))
       (case base
-        [(2) (if negative? (string-append "-"  (string-append "b" (number->string abs-num 2)))  (string-append "b" (number->string abs-num 2)))]
-        [(8) (if negative? (string-append "-"  (string-append "0x" (number->string abs-num 8)))  (string-append "0x" (number->string abs-num 8)))]
-        [(16) (if negative? (string-append "-"  (string-append "hx" (number->string abs-num 16)))  (string-append "hx" (number->string abs-num 16)))]
+        [(2) (if negative? (string-append "-b" (number->string abs-num 2))  (string-append "b" (number->string abs-num 2)))]
+        [(8) (if negative? (string-append "-0x" (number->string abs-num 8))  (string-append "0x" (number->string abs-num 8)))]
+        [(16) (if negative? (string-append "-hx"(number->string abs-num 16))  (string-append "hx" (number->string abs-num 16)))]
         [else (eopl:error "Base no soportada")]
       )
     )
@@ -598,7 +598,7 @@
     (cases primitivaCadena prim
       (concat-primCad () (concat args))
       (length-primCad () (string-length (car args)))
-      (index-primCad ()  (string  (string-ref (car args) (cadr args))))
+      (index-primCad ()  (string (string-ref (car args) (cadr args))))
       )))
 
 (define apply-primitive
@@ -726,7 +726,7 @@
 (define asignar_array
   (lambda (lis_ids vect acc)
     (cond
-      [(null? (cdr lis_ids)) (cons (subvector vect acc (- (vector-length vect) 1)) '())]
+      [(null? (cdr lis_ids)) (cons (list->vector (subvector vect acc (- (vector-length vect) 1))) '())]
       [else (cons (vector-ref vect acc) (asignar_array (cdr lis_ids) vect (+ acc 1)))]
     )
   )
@@ -857,14 +857,18 @@
             (encontrar_indice
               (lambda (Lsym acc)
                 (cond
-                  [(null? Lsym) (eopl:error "indice no encontrado " sym)]
+                  [(null? Lsym) -1]
                   [(equal? (car Lsym) sym) acc]
                   [else (encontrar_indice (cdr Lsym) (+ acc 1))]
                 )
               )
             )
+            (indice (encontrar_indice symB 0))
           ]
-          (vector-set! Vect (encontrar_indice symB 0) val)
+          (if (= indice -1 )
+            (modificar-env envNext sym val)
+            (vector-set! Vect indice val)
+          )
         )
       )
       (extend-env (symB list next-env)
