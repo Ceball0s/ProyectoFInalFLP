@@ -891,12 +891,48 @@
   )
 )
 
+(define ejemplos-scan
+  (list
+    "(scan&parse ''b10101010'') \n"
+    (scan&parse "b10101010")
+    "\n(scan&parse ''-b01010101'') \n"
+    (scan&parse "-b01010101")
+    "\n(scan&parse ''23213'') \n"
+    (scan&parse "232123")
+    "\n(scan&parse ''-12312'')\n"
+    (scan&parse "-12312")
+    "\n(scan&parse ''0x213345'') \n"
+    (scan&parse "0x213345")
+    "\n(scan&parse ''-0x23123'') \n"
+    (scan&parse "-0x23123")
+    "\n(scan&parse ''hxFAB123'') \n"
+    (scan&parse "hxFAB123")
+    "\n(scan&parse ''-hx99EA'') \n"
+    (scan&parse "hx99EA")
+    "\n(scan&parse ''412312.2312'')\n"
+    (scan&parse "412312.2312")
+    "\n(scan&parse ''-23123.2312'')\n"
+    (scan&parse "-23123.2312")
+    "\n(scan&parse ''true'') \n"
+    (scan&parse "true")
+    "\n(scan&parse ''false'') \n"
+    (scan&parse "false")
+    "\n(scan&parse ''\''hola mundo\'''') \n"
+    (scan&parse "\"hola mundo\"")
+    "\n(scan&parse ''\''hola que tal\'''')\n"
+    (scan&parse "\"hola que tal\"")
+    "\n"
+    ))
+
 ;******************************
 ;Pruebas
 
 (show-the-datatypes)
 
 ;(define un-programa-dificil (a-program una-expresion-dificil))
+
+;; Descomentar para mostrar los resultados:
+;(for-each display ejemplos-scan)
 
 ;; Descomentar para pruebas, vuelva a comentar para envitar
 (interpretador)
