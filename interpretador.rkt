@@ -27,7 +27,7 @@
 ;;                  ::= begin <expresion> {; <expresion>}* end
 ;;                     <begin-exp (exp exps)>
 ;;                  ::= set <identificador> = <expresion>
-;;                     <set-exp (id rhsexp)>
+;;                     <set-exp (id newval)>
 ;;  <primitive>     ::= + | - | * | add1 | sub1 
 
 ;******************************
@@ -104,6 +104,7 @@
     (expresion ("true") true-exp)
     (expresion ("false") false-exp)
 
+    
     (expresion ("list" "(" (separated-list expresion ",") ")") lista-exp)
     (expresion ("cons" "(" expresion expresion ")") cons-exp)
     (expresion ("empty") empty-list-exp)
@@ -323,8 +324,8 @@
         (let ((args (eval-rands rands (extend-mod-env ids (list->vector rands) env))))
                  (eval-expresion body
                                   (extend-mod-env ids (list->vector args) env))))
-      (set-exp (id rhs-exp)
-        (let ((argu (eval-expresion rhs-exp env)))
+      (set-exp (id newval-exp)
+        (let ((argu (eval-expresion newval-exp env)))
           (modificar-env env id argu)
           'void-exp)
         )
@@ -366,7 +367,7 @@
             )
           (let loop ((i start))
             (when (< i end)
-              (eval-expresion body-exp (extend-env (list var) (list i) env))
+              (eval-expresion body-exp (extend-mod-env (list var) (vector i) env))
               (loop (+ i sum)))))
       )
       (switch-exp (var_exp list_caso list_exp default_exp)
@@ -662,7 +663,7 @@
         )
       )
       (list-match-exp (cabeza cola) 
-        (if (list? valor)
+        (if (and (list? valor) (not (null? valor)))
           (eval-expresion (car expresi_match) (extend-env (cons cabeza (cons cola '())) (list (car valor) (cdr valor)) env))
           (detector_patron valor (cdr primt_match) (cdr expresi_match) env)
         )
@@ -670,44 +671,50 @@
       (num-match-exp (ids) 
         (if (number? valor)
           (eval-expresion (car expresi_match) (extend-env (list ids) (list valor) env))
-          (cond
-            [(or (equal? (string-ref valor 0) #\b) (and (equal? (string-ref valor 1) #\b) (equal? (string-ref valor 0) #\-)))
-              (eval-expresion (car expresi_match) (extend-env (list ids) (list valor) env))
-            ]
-            [(or (equal? (string-ref valor 0) #\h) (and (equal? (string-ref valor 1) #\h) (equal? (string-ref valor 0) #\-)))
-              (eval-expresion (car expresi_match) (extend-env (list ids) (list valor) env))
-            ]
-            [(or (equal? (string-ref valor 1) #\x) (and (equal? (string-ref valor 2) #\x) (equal? (string-ref valor 0) #\-)))
-              (eval-expresion (car expresi_match) (extend-env (list ids) (list valor) env))
-            ]
-            [else (detector_patron valor (cdr primt_match) (cdr expresi_match) env)]
+          (if (string? valor)
+            (cond
+              [(or (equal? (string-ref valor 0) #\b) (and (equal? (string-ref valor 1) #\b) (equal? (string-ref valor 0) #\-)))
+                (eval-expresion (car expresi_match) (extend-env (list ids) (list valor) env))
+              ]
+              [(or (equal? (string-ref valor 0) #\h) (and (equal? (string-ref valor 1) #\h) (equal? (string-ref valor 0) #\-)))
+                (eval-expresion (car expresi_match) (extend-env (list ids) (list valor) env))
+              ]
+              [(or (equal? (string-ref valor 1) #\x) (and (equal? (string-ref valor 2) #\x) (equal? (string-ref valor 0) #\-)))
+                (eval-expresion (car expresi_match) (extend-env (list ids) (list valor) env))
+              ]
+              [else (detector_patron valor (cdr primt_match) (cdr expresi_match) env)]
+            )
+            (detector_patron valor (cdr primt_match) (cdr expresi_match) env)
           )
         )
       )
-      (cad-match-exp (ids) 
-        (cond
-          [(or (and (equal? (string-ref valor 0) #\b)
-                    (or (equal? (string-ref valor 1) #\0) 
-                        (equal? (string-ref valor 1) #\1)))
-              (and (equal? (string-ref valor 0) #\-)
-                    (equal? (string-ref valor 1) #\b)
-                    (or (equal? (string-ref valor 2) #\0) 
-                        (equal? (string-ref valor 2) #\1))))
-          (detector_patron valor (cdr primt_match) (cdr expresi_match) env)]
-          [(or (and (equal? (string-ref valor 0) #\h)
-                    (equal? (string-ref valor 1) #\x))
-              (and (equal? (string-ref valor 0) #\-)
-                    (equal? (string-ref valor 1) #\h)
-                    (equal? (string-ref valor 2) #\x)))
-          (detector_patron valor (cdr primt_match) (cdr expresi_match) env)]
-          [(or (and (equal? (string-ref valor 0) #\0)
-                    (equal? (string-ref valor 1) #\x))
-              (and (equal? (string-ref valor 0) #\-)
-                    (equal? (string-ref valor 1) #\0)
-                    (equal? (string-ref valor 2) #\x)))
-          (detector_patron valor (cdr primt_match) (cdr expresi_match) env)]
-          [else (eval-expresion (car expresi_match) 
-                          (extend-env (list ids) (list valor) env))]
+      (cad-match-exp (ids)
+        (if (string? valor) 
+          (cond
+            [(or (and (equal? (string-ref valor 0) #\b)
+                      (or (equal? (string-ref valor 1) #\0) 
+                          (equal? (string-ref valor 1) #\1)))
+                (and (equal? (string-ref valor 0) #\-)
+                      (equal? (string-ref valor 1) #\b)
+                      (or (equal? (string-ref valor 2) #\0) 
+                          (equal? (string-ref valor 2) #\1))))
+            (detector_patron valor (cdr primt_match) (cdr expresi_match) env)]
+            [(or (and (equal? (string-ref valor 0) #\h)
+                      (equal? (string-ref valor 1) #\x))
+                (and (equal? (string-ref valor 0) #\-)
+                      (equal? (string-ref valor 1) #\h)
+                      (equal? (string-ref valor 2) #\x)))
+            (detector_patron valor (cdr primt_match) (cdr expresi_match) env)]
+            [(or (and (equal? (string-ref valor 0) #\0)
+                      (equal? (string-ref valor 1) #\x))
+                (and (equal? (string-ref valor 0) #\-)
+                      (equal? (string-ref valor 1) #\0)
+                      (equal? (string-ref valor 2) #\x)))
+            (detector_patron valor (cdr primt_match) (cdr expresi_match) env)]
+            [else (eval-expresion (car expresi_match) 
+                            (extend-env (list ids) (list valor) env))]
+          )
+          (detector_patron valor (cdr primt_match) (cdr expresi_match) env)
         )
       )
 
